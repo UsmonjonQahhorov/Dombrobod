@@ -1,0 +1,15 @@
+[
+  {
+    'c67732e5-6904-47e0-96db-08ec9dff6006': {
+      'chat_id': '-1002272933438',
+      'message_id': 12288,
+      'from_chat_id': 6108693014,
+      'days': 1,
+      'hours': 0,
+      'minutes': 1,
+      'job': <Job
+      (id=c67732e5-6904-47e0-96db-08ec9dff6006
+      name=create_task_func)>
+    }
+  }
+]
