@@ -14,7 +14,6 @@ async def create_all():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
     logging.getLogger('aiogram.event').setLevel(logging.WARNING)
-    bot.delete_webhook(drop_pending_updates=True)
     asyncio.run(main())
     scheduler.start()
 

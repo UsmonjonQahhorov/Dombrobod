@@ -2,6 +2,7 @@ import datetime
 from sqlalchemy import Column, DateTime
 from sqlalchemy import delete as sqlalchemy_delete
 from sqlalchemy import update as sqlalchemy_update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.future import select
 from db import Base, db
 
@@ -50,15 +51,13 @@ class AbstractClass:
     @classmethod
     async def get_user_id(cls, id_):
         try:
-            query = select(cls).where(cls.user_id == id_)
-            objects = await db.execute(query)
-            object_ = objects.first()
-            if object_:
-                return object_[0]
-            else:
-                return []
-        except Exception as e:
-            return e
+            query = select(cls).where(cls.user_id == str(id_))
+            result = await db.execute(query)
+            user = result.scalar_one_or_none()
+            return user
+        except SQLAlchemyError as e:
+            print(f"Database error occurred: {e}")
+            return None
 
     @classmethod
     async def get_group_username(cls, username):

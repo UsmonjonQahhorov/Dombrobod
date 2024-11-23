@@ -20,6 +20,7 @@ async def task_information(msg: Message):
     if tasks:
         messages_dict_list = [to_dict(msg) for msg in tasks]
         for msg_dict in messages_dict_list:
+            print(msg_dict.get('message_id'))
             await bot.forward_message(
                 chat_id=6108693014,
                 from_chat_id=msg.from_user.id,

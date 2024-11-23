@@ -23,12 +23,13 @@ async def echo_handler(message: Message, state: FSMContext) -> None:
 
 
 @message_router.message(F.text.__eq__("ORTGA CHIQISH"))
-async def back_handler(message: Message) -> None:
+async def back_handler(message: Message, state: FSMContext) -> None:
+    await state.clear()
     await message.answer("SIZ BOSH MENUGA QAYDINGIZ", reply_markup=await main_menu())
-
 
 @message_router.message(Send_message.group_chosen)
 async def message_handler(message: Message, state: FSMContext) -> None:
+    print('oneni ami')
     group = await Groups.get_group_username(message.text)
     chat_id = group.group_id
     await state.update_data({"chat_id": chat_id})

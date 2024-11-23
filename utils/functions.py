@@ -15,5 +15,6 @@ def to_dict(message):
 
 
 async def check_user(chat_id):
-    data = await Users.get_user_id(id_=str(chat_id))
-    return data.__dict__.get("is_admin")
+    user = await Users.get_user_id(id_=str(chat_id))
+    print(user.is_admin)
+    return user.is_admin
