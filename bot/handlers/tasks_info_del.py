@@ -22,13 +22,13 @@ async def task_information(msg: Message):
         for msg_dict in messages_dict_list:
             print(msg_dict.get('message_id'))
             await bot.forward_message(
-                chat_id=6108693014,
+                chat_id=176163305,
                 from_chat_id=msg.from_user.id,
                 message_id=msg_dict.get('message_id')
             )
 
             await bot.send_message(
-                chat_id=6108693014,
+                chat_id=176163305,
                 text=f"USHBU HABARNI OCHIRISH UCHUN O'CHIRISH TUGMASINI BOSING",
                 reply_markup=await delete(task_id=msg_dict.get('job_name'))
             )
