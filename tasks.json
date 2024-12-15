@@ -1,15 +1,52 @@
-[
-  {
-    'c67732e5-6904-47e0-96db-08ec9dff6006': {
-      'chat_id': '-1002272933438',
-      'message_id': 12288,
-      'from_chat_id': 6108693014,
-      'days': 1,
-      'hours': 0,
-      'minutes': 1,
-      'job': <Job
-      (id=c67732e5-6904-47e0-96db-08ec9dff6006
-      name=create_task_func)>
-    }
-  }
-]
+
+
+create table users
+(
+    id           serial
+        primary key,
+
+    user_id      varchar(255) not null,
+    phone_number varchar(255) not null,
+    username     varchar(255) not null,
+    is_active    boolean   default true,
+    created_at   timestamp default now(),
+    updated_at   timestamp default now(),
+    is_admin boolean default False
+);
+
+alter table users
+    owner to postgres;
+
+create table messages
+(
+    id         serial
+        primary key,
+    message_id integer not null,
+    schedule   varchar(255),
+    group_id   bigint
+        references groups
+            on delete cascade,
+    created_at timestamp default now(),
+    updated_at timestamp default now(),
+    user_id    integer
+        constraint fk_user_messages
+            references users,
+    job_name   varchar(255)
+);
+
+alter table messages
+    owner to postgres;
+
+
+create table groups
+(
+    id         serial
+        primary key,
+    group_id   varchar   not null,
+    username   varchar   not null,
+    created_at timestamp not null,
+    updated_at timestamp not null
+);
+
+alter table groups
+    owner to postgres;

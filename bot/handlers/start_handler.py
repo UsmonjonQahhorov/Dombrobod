@@ -23,7 +23,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
             await Users.create(username=username, user_id=str(user_id), phone_number="987654321")
         await state.set_state(MenuState.add_group)
     except Exception as e:
-        await bot.send_message(chat_id=6108693014, text=e)
+        await bot.send_message(chat_id=6108693014, text=str(e))
 
     status = await check_user(chat_id=message.from_user.id)
     if status:
