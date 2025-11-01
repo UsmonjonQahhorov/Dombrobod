@@ -8,5 +8,5 @@ class Config:
     DB_PASSWORD = '1'
     DB_NAME = 'dombrobod_db'
     DB_PORT = '5432'
-    DB_HOST = 'postgres'
+    DB_HOST = 'localhost'
     DB_CONFIG = f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
