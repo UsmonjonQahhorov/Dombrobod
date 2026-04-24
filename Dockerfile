@@ -1,22 +1,14 @@
-# Use the slim variant of Python 3.10
-FROM python:3.10
+FROM python:3.12-slim
 
-# Set the working directory
 WORKDIR /app
 
-# Install required system packages
-RUN apt-get update && \
-    apt-get install -y python3-venv && \
-    apt-get clean
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# Copy the current directory contents into the container at /app
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r /app/requirements.txt
+
 COPY . /app
 
-# Create a virtual environment
-RUN python3 -m venv venv
-
-# Activate virtual environment and install dependencies
-RUN /bin/bash -c "source /app/venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt"
-
-# Run the application
-CMD ["./venv/bin/python", "main.py"]
+CMD ["python", "main.py"]

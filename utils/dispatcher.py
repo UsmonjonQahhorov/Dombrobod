@@ -5,15 +5,21 @@ from aiogram import Dispatcher, Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from dotenv import load_dotenv
-from bot.handlers.start_handler import main_router
-from db import db
+from utils.scheduler import ensure_scheduler_started, restore_jobs_from_db
 
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
+if not TOKEN:
+    raise RuntimeError("TOKEN is missing. Set it in environment or .env file.")
+
 dp = Dispatcher()
 bot = Bot(TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
 
 async def main() -> None:
-    await dp.start_polling(bot)
+    ensure_scheduler_started()
     logging.basicConfig(level=logging.WARNING)
+    # Ensure polling works even if webhook was previously configured.
+    await bot.delete_webhook(drop_pending_updates=False)
+    await restore_jobs_from_db()
+    await dp.start_polling(bot)

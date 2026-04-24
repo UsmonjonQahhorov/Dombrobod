@@ -1,2 +1,7 @@
-TOKEN = 7156112134:AAHvzX814SGFo-anE6Z_R-s1th_nEysuaSc
-ADMIN = 6108693014
+TOKEN=put_your_telegram_bot_token_here
+ADMIN=6108693014
+DB_USER=postgres
+DB_PASSWORD=1
+DB_NAME=dombrobod_db
+DB_PORT=5432
+DB_HOST=postgres

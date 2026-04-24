@@ -22,17 +22,15 @@ async def group_username_handler(message: Message, state: FSMContext) -> None:
         chat_info = await bot.get_chat(group_link)
         chat_title = chat_info.title
         chat_id = chat_info.id
-        # group = await Groups.get_group_id(id_=str(chat_id))
-        group = []
-        if group == []:
-            print("hato")
+        group = await Groups.get_group_id(id_=str(chat_id))
+        if not group:
             await Groups.create(group_id=str(chat_id), username=str(chat_title))
             await message.answer("Gurux qoshildi, botdan foydalanishingiz mumkin!", reply_markup=await main_menu())
         else:
             await message.answer("Bu gurux allaqachon qoshilgan.", reply_markup=await main_menu())
 
-        await state.set_state("main_menu")
+        await state.clear()
 
     except Exception as e:
         await message.answer(f"Xatolik yuz berdi: {str(e)}. Iltimos, guruh username ni to'g'ri formatda yuboring.")
-        await state.set_state("main_menu")
+        await state.clear()

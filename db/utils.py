@@ -34,7 +34,6 @@ class AbstractClass:
             .values(**kwargs)
             .execution_options(synchronize_session="fetch")
         )
-        print(query)
         await db.execute(query)
         await cls.commit()
 
@@ -69,8 +68,8 @@ class AbstractClass:
                 return object_[0]
             else:
                 return []
-        except Exception as e:
-            return e
+        except SQLAlchemyError:
+            return []
 
     @classmethod
     async def get_group_id(cls, id_):
@@ -96,8 +95,8 @@ class AbstractClass:
             await db.execute(query)
             await cls.commit()
             return True
-        except:
-            return "Something went wrong!!"
+        except SQLAlchemyError:
+            return False
 
     @classmethod
     async def get_all(cls):

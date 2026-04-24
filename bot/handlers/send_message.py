@@ -2,7 +2,6 @@ from aiogram import F, Router
 from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove, CallbackQuery
-from sqlalchemy.util import await_fallback
 
 from bot.buttons.inline_buttons import MyCallback
 from bot.buttons.reply_markup import groups_button, main_menu, back_button, yess_no
@@ -10,8 +9,6 @@ from bot.states import Send_message
 from db.models import Groups, Messages
 from utils.dispatcher import bot
 from utils.scheduler import schedule_forwarding, remove_task
-
-from aiogram.types.reply_keyboard_remove import ReplyKeyboardRemove
 
 message_router = Router(name=__name__)
 
@@ -29,8 +26,11 @@ async def back_handler(message: Message, state: FSMContext) -> None:
 
 @message_router.message(Send_message.group_chosen)
 async def message_handler(message: Message, state: FSMContext) -> None:
-    print('oneni ami')
     group = await Groups.get_group_username(message.text)
+    if not group:
+        await message.answer("Bunday guruh topilmadi. Qaytadan tanlang.", reply_markup=await groups_button())
+        return
+
     chat_id = group.group_id
     await state.update_data({"chat_id": chat_id})
     await message.answer("YUBORMOQCHI BOLGAN HABARINGIZNI KIRITING", reply_markup=ReplyKeyboardRemove())
@@ -52,6 +52,11 @@ async def messag_save_handler(message: Message, state: FSMContext) -> None:
 async def interval_handler(msg: Message, state: FSMContext) -> None:
     try:
         a, b, c = map(int, msg.text.split("-"))
+        if a < 0 or b < 0 or c < 0:
+            raise ValueError
+        if a == 0 and b == 0 and c == 0:
+            await msg.answer("Interval 0 bo'lishi mumkin emas.", reply_markup=await back_button())
+            return
         await state.update_data({"a": a, "b": b, "c": c})
     except ValueError:
         await msg.answer('INTERVALNI NOTO\'G\'RI KIRITDINGIZ', reply_markup=await back_button())
@@ -90,10 +95,11 @@ async def confirmation_handler(msg: Message, state: FSMContext) -> None:
             group_id=group_id,
             message_id=message_id,
             from_chat_id=msg.from_user.id,
-            days_=str(a), hours_=str(b), minutes_=str(c)
+            days_=a,
+            hours_=b,
+            minutes_=c
         )
-        print(job_id)
-        await msg.answer('Habar jo\'natish boshlandi', reply_markup=await main_menu())
+        await msg.answer(f"Habar jo'natish boshlandi. Task ID: {job_id}", reply_markup=await main_menu())
         await state.clear()
 
     elif msg.text == "YOQ":
@@ -112,13 +118,16 @@ async def confirmation_handler(msg: Message, state: FSMContext) -> None:
 
 @message_router.callback_query(MyCallback.filter(F.name == "delete_task"))
 async def delete_task_handler(query: CallbackQuery, callback_data: MyCallback):
-    print(callback_data)
     job_id = str(callback_data.task_id)
 
     if job_id:
-        remove_task(job_id)
-        await Messages.delete_task(job_id)
-        await query.message.answer("Habaringiz o'chirildi", reply_markup=await main_menu())
+        deleted = remove_task(job_id)
+        if deleted:
+            await Messages.delete_task(job_id)
+            await query.message.answer("Habaringiz o'chirildi", reply_markup=await main_menu())
+        else:
+            await query.message.answer("Task topilmadi yoki allaqachon o'chirilgan.", reply_markup=await main_menu())
+        await query.answer()
 
     else:
-        await query.answer("Hech qanday habar mavjud emas", reply_markup=await main_menu())
+        await query.answer("Hech qanday habar mavjud emas")
