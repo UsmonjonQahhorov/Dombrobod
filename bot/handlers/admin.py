@@ -4,6 +4,7 @@ from aiogram.types import Message
 
 from db.models import Users
 from utils.functions import is_user_admin
+from utils.telegram_safe import safe_answer
 
 admin_router = Router(name=__name__)
 
@@ -11,7 +12,7 @@ admin_router = Router(name=__name__)
 @admin_router.message(Command("admin"))
 async def admin_handler(message: Message) -> None:
     if not await is_user_admin(message.from_user.id):
-        await message.answer("Sizda ushbu buyruq uchun ruxsat yo'q.")
+        await safe_answer(message, "Sizda ushbu buyruq uchun ruxsat yo'q.")
         return
 
     target_user_id: str | None = None
@@ -23,13 +24,13 @@ async def admin_handler(message: Message) -> None:
         target_user_id = str(message.reply_to_message.from_user.id)
 
     if not target_user_id:
-        await message.answer("Format: /admin TELEGRAM_USER_ID yoki foydalanuvchi xabariga reply qilib /admin yuboring.")
+        await safe_answer(message, "Format: /admin TELEGRAM_USER_ID yoki foydalanuvchi xabariga reply qilib /admin yuboring.")
         return
 
     target_user = await Users.get_user_id(target_user_id)
     if not target_user:
-        await message.answer("Foydalanuvchi topilmadi. Avval u /start bossin.")
+        await safe_answer(message, "Foydalanuvchi topilmadi. Avval u /start bossin.")
         return
 
     await Users.update(id_=target_user_id, is_admin=True)
-    await message.answer(f"{target_user_id} admin qilindi.")
+    await safe_answer(message, f"{target_user_id} admin qilindi.")

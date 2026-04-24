@@ -5,6 +5,7 @@ from uuid import uuid4
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from db.models import Groups, Messages, Users
+from utils.telegram_safe import with_telegram_retry
 
 
 ADMIN_CHAT_ID = 6108693014
@@ -23,7 +24,9 @@ async def create_task_func(job_id: str, chat_id: str, message_id: int, from_chat
     from utils.dispatcher import bot
 
     try:
-        await bot.forward_message(chat_id=chat_id, message_id=message_id, from_chat_id=from_chat_id)
+        await with_telegram_retry(
+            lambda: bot.forward_message(chat_id=chat_id, message_id=message_id, from_chat_id=from_chat_id)
+        )
         logger.info("Message forwarded successfully (job_id=%s, target=%s)", job_id, chat_id)
     except Exception as exc:
         error_text = str(exc)
@@ -34,7 +37,9 @@ async def create_task_func(job_id: str, chat_id: str, message_id: int, from_chat
             logger.warning("Removed broken job due to missing source message (job_id=%s)", job_id)
         else:
             logger.exception("Forwarding failed (job_id=%s): %s", job_id, error_text)
-        await bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"Forwarding failed ({job_id}): {error_text}")
+        await with_telegram_retry(
+            lambda: bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"Forwarding failed ({job_id}): {error_text}")
+        )
 
 
 async def schedule_forwarding(

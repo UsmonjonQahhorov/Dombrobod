@@ -9,38 +9,40 @@ from bot.states import Send_message
 from db.models import Groups, Messages
 from utils.dispatcher import bot
 from utils.scheduler import schedule_forwarding, remove_task
+from utils.telegram_safe import safe_answer, with_telegram_retry
 
 message_router = Router(name=__name__)
 
 
 @message_router.message(F.text == "Habar yuborish")
 async def echo_handler(message: Message, state: FSMContext) -> None:
-    await message.answer(f"HABAR YUBORMOQCHI BOLGAN GURUXNI TANLANG!", reply_markup=await groups_button())
+    await safe_answer(message, "HABAR YUBORMOQCHI BOLGAN GURUXNI TANLANG!", reply_markup=await groups_button())
     await state.set_state(Send_message.group_chosen)
 
 
 @message_router.message(F.text.__eq__("ORTGA CHIQISH"))
 async def back_handler(message: Message, state: FSMContext) -> None:
     await state.clear()
-    await message.answer("SIZ BOSH MENUGA QAYDINGIZ", reply_markup=await main_menu())
+    await safe_answer(message, "SIZ BOSH MENUGA QAYDINGIZ", reply_markup=await main_menu())
 
 @message_router.message(Send_message.group_chosen)
 async def message_handler(message: Message, state: FSMContext) -> None:
     group = await Groups.get_group_username(message.text)
     if not group:
-        await message.answer("Bunday guruh topilmadi. Qaytadan tanlang.", reply_markup=await groups_button())
+        await safe_answer(message, "Bunday guruh topilmadi. Qaytadan tanlang.", reply_markup=await groups_button())
         return
 
     chat_id = group.group_id
     await state.update_data({"chat_id": chat_id})
-    await message.answer("YUBORMOQCHI BOLGAN HABARINGIZNI KIRITING", reply_markup=ReplyKeyboardRemove())
+    await safe_answer(message, "YUBORMOQCHI BOLGAN HABARINGIZNI KIRITING", reply_markup=ReplyKeyboardRemove())
     await state.set_state(Send_message.message)
 
 
 @message_router.message(Send_message.message)
 async def messag_save_handler(message: Message, state: FSMContext) -> None:
     await state.update_data({"message_id": message.message_id})
-    await message.answer(
+    await safe_answer(
+        message,
         "YUBORISH INTERVALINI KIRITING ([KUN-SOAT-MINUT = 30-1-30])\nAGAR SOAT YOKI MINUT "
         "KIRITISHNI HOHLAMASANGIZ 0 (NOL) KIRITIB KETING",
         reply_markup=await back_button()
@@ -55,11 +57,11 @@ async def interval_handler(msg: Message, state: FSMContext) -> None:
         if a < 0 or b < 0 or c < 0:
             raise ValueError
         if a == 0 and b == 0 and c == 0:
-            await msg.answer("Interval 0 bo'lishi mumkin emas.", reply_markup=await back_button())
+            await safe_answer(msg, "Interval 0 bo'lishi mumkin emas.", reply_markup=await back_button())
             return
         await state.update_data({"a": a, "b": b, "c": c})
     except ValueError:
-        await msg.answer('INTERVALNI NOTO\'G\'RI KIRITDINGIZ', reply_markup=await back_button())
+        await safe_answer(msg, 'INTERVALNI NOTO\'G\'RI KIRITDINGIZ', reply_markup=await back_button())
         return
 
     data = await state.get_data()
@@ -69,16 +71,23 @@ async def interval_handler(msg: Message, state: FSMContext) -> None:
     try:
         group = await Groups.get_group_id(group_id)
 
-        await msg.answer(
+        await safe_answer(
+            msg,
             f"FOYDALANUVCHI HABARINGIZNI TEKSHIRING. SIZ YUBORMOQCHI BOLGAN HABAR QUYIDAGI👇👇 VA SIZ UNI"
             f" <b>{group.username}</b> GURUXIGA👉  {a} KUN DAVOMIDA  {b} SOAT VA {c} MINUT INTERVALDA JONATMOQCHIMISIZ?",
             parse_mode=ParseMode.HTML, reply_markup=await yess_no()
         )
-        await bot.forward_message(chat_id=msg.from_user.id, message_id=message_id, from_chat_id=msg.from_user.id)
+        await with_telegram_retry(
+            lambda: bot.forward_message(
+                chat_id=msg.from_user.id,
+                message_id=message_id,
+                from_chat_id=msg.from_user.id,
+            )
+        )
         await state.set_state(Send_message.confirmation)
 
     except Exception as e:
-        await bot.send_message(chat_id=6108693014, text=f"Error: {str(e)}")  # Better error formatting
+        await with_telegram_retry(lambda: bot.send_message(chat_id=6108693014, text=f"Error: {str(e)}"))
 
 
 @message_router.message(Send_message.confirmation)
@@ -93,9 +102,12 @@ async def confirmation_handler(msg: Message, state: FSMContext) -> None:
     if msg.text == "HAA":
         try:
             # Immediate delivery check: fail fast if bot can't forward to the selected group.
-            await bot.forward_message(chat_id=group_id, message_id=message_id, from_chat_id=msg.from_user.id)
+            await with_telegram_retry(
+                lambda: bot.forward_message(chat_id=group_id, message_id=message_id, from_chat_id=msg.from_user.id)
+            )
         except Exception as e:
-            await msg.answer(
+            await safe_answer(
+                msg,
                 f"Habarni guruhga yuborib bo'lmadi: {str(e)}\n"
                 f"Bot guruhda borligini va yozish huquqi borligini tekshiring.",
                 reply_markup=await main_menu(),
@@ -113,18 +125,18 @@ async def confirmation_handler(msg: Message, state: FSMContext) -> None:
                 minutes_=c
             )
         except Exception as e:
-            await msg.answer(f"Schedule yaratilmadi: {str(e)}", reply_markup=await main_menu())
+            await safe_answer(msg, f"Schedule yaratilmadi: {str(e)}", reply_markup=await main_menu())
             await state.clear()
             return
 
-        await msg.answer(f"Habar jo'natish boshlandi. Task ID: {job_id}", reply_markup=await main_menu())
+        await safe_answer(msg, f"Habar jo'natish boshlandi. Task ID: {job_id}", reply_markup=await main_menu())
         await state.clear()
 
     elif msg.text == "YOQ":
-        await msg.answer("BOSH MENUGA QAYDINGIZ", reply_markup=await main_menu())
+        await safe_answer(msg, "BOSH MENUGA QAYDINGIZ", reply_markup=await main_menu())
         await state.clear()
     else:
-        await msg.answer("Iltimos, 'HAA' yoki 'YOQ' tugmalarini bosing.", reply_markup=await yess_no())
+        await safe_answer(msg, "Iltimos, 'HAA' yoki 'YOQ' tugmalarini bosing.", reply_markup=await yess_no())
 
 
 # Ochirish
@@ -142,10 +154,10 @@ async def delete_task_handler(query: CallbackQuery, callback_data: MyCallback):
         deleted = remove_task(job_id)
         if deleted:
             await Messages.delete_task(job_id)
-            await query.message.answer("Habaringiz o'chirildi", reply_markup=await main_menu())
+            await safe_answer(query.message, "Habaringiz o'chirildi", reply_markup=await main_menu())
         else:
-            await query.message.answer("Task topilmadi yoki allaqachon o'chirilgan.", reply_markup=await main_menu())
-        await query.answer()
+            await safe_answer(query.message, "Task topilmadi yoki allaqachon o'chirilgan.", reply_markup=await main_menu())
+        await with_telegram_retry(lambda: query.answer())
 
     else:
-        await query.answer("Hech qanday habar mavjud emas")
+        await with_telegram_retry(lambda: query.answer("Hech qanday habar mavjud emas"))

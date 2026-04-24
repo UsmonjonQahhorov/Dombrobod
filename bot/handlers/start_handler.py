@@ -7,6 +7,7 @@ from bot.buttons.reply_markup import main_menu
 from bot.states import MenuState
 from db.models import Users
 from utils.functions import get_super_admin_ids, is_user_admin
+from utils.telegram_safe import safe_answer, with_telegram_retry
 
 main_router = Router(name=__name__)
 
@@ -24,11 +25,17 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
             await Users.update(id_=str(user_id), is_admin=True)
         await state.set_state(MenuState.add_group)
     except Exception as e:
-        await bot.send_message(chat_id=6108693014, text=str(e))
+        await with_telegram_retry(lambda: bot.send_message(chat_id=6108693014, text=str(e)))
 
     if await is_user_admin(user_id):
-        await message.answer(f"Hello, {html.bold(message.from_user.full_name)}! Menulardan birini tanlang",
-                             reply_markup=await main_menu())
+        await safe_answer(
+            message,
+            f"Hello, {html.bold(message.from_user.full_name)}! Menulardan birini tanlang",
+            reply_markup=await main_menu(),
+        )
     else:
-        await message.answer("Siz botdan foydalana olmaysiz. Murojat uchun @U_Qohhorov",
-                             reply_markup=ReplyKeyboardRemove())
+        await safe_answer(
+            message,
+            "Siz botdan foydalana olmaysiz. Murojat uchun @U_Qohhorov",
+            reply_markup=ReplyKeyboardRemove(),
+        )
