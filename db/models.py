@@ -1,18 +1,14 @@
-from datetime import datetime
-
-from sqlalchemy import Column, String, Sequence, Boolean, Integer, Float, DateTime, ForeignKey
-from sqlalchemy import Integer, String, BigInteger, VARCHAR, ForeignKey, Text
-from sqlalchemy.future import select
-from sqlalchemy.orm import relationship, mapped_column, Mapped
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base
-from db.utils import CreatedModel, db, AbstractClass
+from db.utils import CreatedModel
 
 
 class Users(CreatedModel):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[str] = mapped_column(String(255))
+    user_id: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     phone_number: Mapped[str] = mapped_column(String(255))
     username: Mapped[str] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True)
@@ -22,7 +18,7 @@ class Users(CreatedModel):
 class Groups(CreatedModel):
     __tablename__ = 'groups'
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    group_id: Mapped[str] = mapped_column(String(255))
+    group_id: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     username: Mapped[str] = mapped_column(String(255))
 
     def __repr__(self):
@@ -36,4 +32,4 @@ class Messages(CreatedModel):
     schedule: Mapped[str] = mapped_column(String(255))
     group_id = Column(Integer, ForeignKey("groups.id"))
     user_id = Column(Integer, ForeignKey("users.id"))
-    job_name = Column(String(255))
+    job_name = Column(String(255), unique=True, index=True, nullable=True)

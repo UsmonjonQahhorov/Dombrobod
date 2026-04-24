@@ -1,9 +1,9 @@
 from db import db
+from db.migrations import run_migrations
 from bot.handlers import *
-import logging
-import sys
 import asyncio
 from utils.dispatcher import main
+from utils.logging_config import setup_logging
 
 
 async def create_all():
@@ -12,12 +12,12 @@ async def create_all():
 
 async def run() -> None:
     await create_all()
+    await run_migrations()
     await main()
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-    logging.getLogger('aiogram.event').setLevel(logging.WARNING)
+    setup_logging()
     asyncio.run(run())
 
 

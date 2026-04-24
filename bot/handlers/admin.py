@@ -23,7 +23,7 @@ async def admin_handler(message: Message) -> None:
         target_user_id = str(message.reply_to_message.from_user.id)
 
     if not target_user_id:
-        await message.answer("Format: /admin <telegram_user_id> yoki foydalanuvchi xabariga reply qilib /admin yuboring.")
+        await message.answer("Format: /admin TELEGRAM_USER_ID yoki foydalanuvchi xabariga reply qilib /admin yuboring.")
         return
 
     target_user = await Users.get_user_id(target_user_id)

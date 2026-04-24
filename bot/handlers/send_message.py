@@ -91,14 +91,32 @@ async def confirmation_handler(msg: Message, state: FSMContext) -> None:
     c = int(data["c"])
 
     if msg.text == "HAA":
-        job_id = await schedule_forwarding(
-            group_id=group_id,
-            message_id=message_id,
-            from_chat_id=msg.from_user.id,
-            days_=a,
-            hours_=b,
-            minutes_=c
-        )
+        try:
+            # Immediate delivery check: fail fast if bot can't forward to the selected group.
+            await bot.forward_message(chat_id=group_id, message_id=message_id, from_chat_id=msg.from_user.id)
+        except Exception as e:
+            await msg.answer(
+                f"Habarni guruhga yuborib bo'lmadi: {str(e)}\n"
+                f"Bot guruhda borligini va yozish huquqi borligini tekshiring.",
+                reply_markup=await main_menu(),
+            )
+            await state.clear()
+            return
+
+        try:
+            job_id = await schedule_forwarding(
+                group_id=group_id,
+                message_id=message_id,
+                from_chat_id=msg.from_user.id,
+                days_=a,
+                hours_=b,
+                minutes_=c
+            )
+        except Exception as e:
+            await msg.answer(f"Schedule yaratilmadi: {str(e)}", reply_markup=await main_menu())
+            await state.clear()
+            return
+
         await msg.answer(f"Habar jo'natish boshlandi. Task ID: {job_id}", reply_markup=await main_menu())
         await state.clear()
 

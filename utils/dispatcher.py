@@ -18,7 +18,7 @@ bot = Bot(TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
 async def main() -> None:
     ensure_scheduler_started()
-    logging.basicConfig(level=logging.WARNING)
+    logging.getLogger(__name__).info("Starting bot polling")
     # Ensure polling works even if webhook was previously configured.
     await bot.delete_webhook(drop_pending_updates=False)
     await restore_jobs_from_db()

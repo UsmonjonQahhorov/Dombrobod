@@ -1,4 +1,5 @@
 import datetime
+import logging
 from sqlalchemy import Column, DateTime
 from sqlalchemy import delete as sqlalchemy_delete
 from sqlalchemy import update as sqlalchemy_update
@@ -7,6 +8,7 @@ from sqlalchemy.future import select
 from db import Base, db
 
 db.init()
+logger = logging.getLogger(__name__)
 
 
 # ----------------------------- ABSTRACTS ----------------------------------
@@ -55,7 +57,7 @@ class AbstractClass:
             user = result.scalar_one_or_none()
             return user
         except SQLAlchemyError as e:
-            print(f"Database error occurred: {e}")
+            logger.exception("Database error in get_user_id: %s", e)
             return None
 
     @classmethod
