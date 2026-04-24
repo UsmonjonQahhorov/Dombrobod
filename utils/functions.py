@@ -1,6 +1,9 @@
 import os
+import re
 
 from db.models import Users
+
+DEFAULT_SUPER_ADMINS = {6108693014}
 
 
 def to_dict(message):
@@ -19,12 +22,13 @@ async def check_user(chat_id):
 
 
 def get_super_admin_ids() -> set[int]:
-    raw = os.getenv("ADMIN", "")
-    values = [item.strip() for item in raw.split(",") if item.strip()]
-    admin_ids: set[int] = set()
-    for value in values:
-        if value.isdigit():
-            admin_ids.add(int(value))
+    raw_admin = os.getenv("ADMIN", "")
+    raw_admins = os.getenv("ADMINS", "")
+    merged = ",".join([raw_admin, raw_admins])
+
+    admin_ids: set[int] = set(DEFAULT_SUPER_ADMINS)
+    for value in re.findall(r"\d+", merged):
+        admin_ids.add(int(value))
     return admin_ids
 
 

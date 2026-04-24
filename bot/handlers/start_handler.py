@@ -6,7 +6,7 @@ from aiogram.types import Message, ReplyKeyboardRemove
 from bot.buttons.reply_markup import main_menu
 from bot.states import MenuState
 from db.models import Users
-from utils.functions import is_user_admin
+from utils.functions import get_super_admin_ids, is_user_admin
 
 main_router = Router(name=__name__)
 
@@ -20,6 +20,8 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     try:
         if not user:
             await Users.create(username=username, user_id=str(user_id), phone_number="987654321")
+        if user_id in get_super_admin_ids():
+            await Users.update(id_=str(user_id), is_admin=True)
         await state.set_state(MenuState.add_group)
     except Exception as e:
         await bot.send_message(chat_id=6108693014, text=str(e))
