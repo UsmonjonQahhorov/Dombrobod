@@ -18,6 +18,7 @@ class AbstractClass:
         try:
             await db.commit()
         except Exception:
+            logger.debug("Rolling back DB session after commit failure")
             await db.rollback()
             raise
 
@@ -57,6 +58,8 @@ class AbstractClass:
             user = result.scalar_one_or_none()
             return user
         except SQLAlchemyError as e:
+            logger.debug("Rolling back DB session in get_user_id")
+            await db.rollback()
             logger.exception("Database error in get_user_id: %s", e)
             return None
 
@@ -71,6 +74,8 @@ class AbstractClass:
             else:
                 return []
         except SQLAlchemyError:
+            logger.debug("Rolling back DB session in get_group_username")
+            await db.rollback()
             return []
 
     @classmethod
@@ -98,6 +103,8 @@ class AbstractClass:
             await cls.commit()
             return True
         except SQLAlchemyError:
+            logger.debug("Rolling back DB session in delete_task")
+            await db.rollback()
             return False
 
     @classmethod

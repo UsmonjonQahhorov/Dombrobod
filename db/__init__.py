@@ -1,6 +1,7 @@
-from sqlalchemy import inspect
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, AsyncAttrs
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+import asyncio
+
+from sqlalchemy.ext.asyncio import AsyncSession, AsyncAttrs, async_scoped_session, create_async_engine
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from db.config import Config
 
@@ -22,10 +23,10 @@ class AsyncDatabaseSession:
             Config.DB_CONFIG,
             future=True,
             echo=False,
-            isolation_level="AUTOCOMMIT"
-
+            pool_pre_ping=True,
         )
-        self._session = sessionmaker(self._engine, expire_on_commit=False, class_=AsyncSession)()
+        session_factory = sessionmaker(self._engine, expire_on_commit=False, class_=AsyncSession)
+        self._session = async_scoped_session(session_factory, scopefunc=asyncio.current_task)
 
     async def create_all(self):
         async with self._engine.begin() as conn:

@@ -1,9 +1,12 @@
 import logging
 from datetime import datetime, timedelta
+import inspect
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from db import db
 from db.models import Groups, Messages, Users
 from utils.telegram_safe import with_telegram_retry
 
@@ -12,6 +15,17 @@ ADMIN_CHAT_ID = 6108693014
 scheduler = AsyncIOScheduler()
 task_registry: dict[str, dict] = {}
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def db_session_scope():
+    try:
+        yield
+    finally:
+        logger.debug("Cleaning scoped DB session in scheduler context")
+        maybe_awaitable = db.remove()
+        if inspect.isawaitable(maybe_awaitable):
+            await maybe_awaitable
 
 
 def ensure_scheduler_started() -> None:
@@ -33,7 +47,8 @@ async def create_task_func(job_id: str, chat_id: str, message_id: int, from_chat
         # Auto-clean invalid jobs to avoid endless failing retries.
         if "message to forward not found" in error_text.lower():
             remove_task(job_id)
-            await Messages.delete_task(job_id)
+            async with db_session_scope():
+                await Messages.delete_task(job_id)
             logger.warning("Removed broken job due to missing source message (job_id=%s)", job_id)
         else:
             logger.exception("Forwarding failed (job_id=%s): %s", job_id, error_text)
@@ -77,18 +92,19 @@ async def schedule_forwarding(
         "job": job,
     }
 
-    group = await Groups.get_group_id(group_id)
-    user = await Users.get_user_id(str(from_chat_id))
-    if not group or not user:
-        raise ValueError("User or group not found for scheduling")
+    async with db_session_scope():
+        group = await Groups.get_group_id(group_id)
+        user = await Users.get_user_id(str(from_chat_id))
+        if not group or not user:
+            raise ValueError("User or group not found for scheduling")
 
-    await Messages.create(
-        message_id=message_id,
-        group_id=int(group.id),
-        user_id=int(user.id),
-        job_name=job_id,
-        schedule=f"{days_}-{hours_}-{minutes_}",
-    )
+        await Messages.create(
+            message_id=message_id,
+            group_id=int(group.id),
+            user_id=int(user.id),
+            job_name=job_id,
+            schedule=f"{days_}-{hours_}-{minutes_}",
+        )
     return job_id
 
 
@@ -111,17 +127,19 @@ def _parse_schedule(schedule: str) -> tuple[int, int, int]:
 
 async def restore_jobs_from_db() -> None:
     ensure_scheduler_started()
-    tasks = await Messages.get_all()
+    async with db_session_scope():
+        tasks = await Messages.get_all()
     for task in tasks:
         if not task.job_name:
             continue
         if scheduler.get_job(task.job_name):
             continue
 
-        group = await Groups.get(task.group_id)
-        user = await Users.get(task.user_id)
-        if not group or not user:
-            continue
+        async with db_session_scope():
+            group = await Groups.get(task.group_id)
+            user = await Users.get(task.user_id)
+            if not group or not user:
+                continue
 
         try:
             days_, hours_, minutes_ = _parse_schedule(task.schedule)
@@ -135,7 +153,8 @@ async def restore_jobs_from_db() -> None:
 
         original_end_date = task.created_at + timedelta(days=max(days_, 1))
         if original_end_date <= datetime.now():
-            await Messages.delete_task(task.job_name)
+            async with db_session_scope():
+                await Messages.delete_task(task.job_name)
             logger.info("Removed expired job from DB on restore (job_id=%s)", task.job_name)
             continue
 

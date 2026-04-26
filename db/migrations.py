@@ -47,3 +47,4 @@ async def run_migrations() -> None:
             text("INSERT INTO schema_migrations(name) VALUES (:name);"),
             {"name": name},
         )
+    await db.commit()

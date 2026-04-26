@@ -6,6 +6,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramNetworkError
 from dotenv import load_dotenv
+from utils.db_session_middleware import DbSessionCleanupMiddleware
 from utils.scheduler import ensure_scheduler_started, restore_jobs_from_db
 from utils.telegram_safe import with_telegram_retry
 
@@ -15,6 +16,7 @@ if not TOKEN:
     raise RuntimeError("TOKEN is missing. Set it in environment or .env file.")
 
 dp = Dispatcher()
+dp.update.outer_middleware(DbSessionCleanupMiddleware())
 bot = Bot(
     TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML),
