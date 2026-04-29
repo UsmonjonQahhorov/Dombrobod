@@ -39,7 +39,14 @@ async def create_task_func(job_id: str, chat_id: str, message_id: int, from_chat
 
     try:
         await with_telegram_retry(
-            lambda: bot.forward_message(chat_id=chat_id, message_id=message_id, from_chat_id=from_chat_id)
+            lambda: bot.forward_message(
+                chat_id=chat_id,
+                message_id=message_id,
+                from_chat_id=from_chat_id,
+                request_timeout=20,
+            ),
+            retries=4,
+            base_delay=1.0,
         )
         logger.info("Message forwarded successfully (job_id=%s, target=%s)", job_id, chat_id)
     except Exception as exc:
@@ -52,9 +59,18 @@ async def create_task_func(job_id: str, chat_id: str, message_id: int, from_chat
             logger.warning("Removed broken job due to missing source message (job_id=%s)", job_id)
         else:
             logger.exception("Forwarding failed (job_id=%s): %s", job_id, error_text)
-        await with_telegram_retry(
-            lambda: bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"Forwarding failed ({job_id}): {error_text}")
-        )
+        try:
+            await with_telegram_retry(
+                lambda: bot.send_message(
+                    chat_id=ADMIN_CHAT_ID,
+                    text=f"Forwarding failed ({job_id}): {error_text}",
+                    request_timeout=15,
+                ),
+                retries=2,
+                base_delay=0.8,
+            )
+        except Exception as notify_exc:
+            logger.error("Failed to notify admin about forwarding failure (job_id=%s): %s", job_id, notify_exc)
 
 
 async def schedule_forwarding(

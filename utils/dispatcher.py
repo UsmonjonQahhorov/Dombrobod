@@ -3,8 +3,10 @@ import os
 
 from aiogram import Dispatcher, Bot
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramNetworkError
+from aiohttp import ClientTimeout
 from dotenv import load_dotenv
 from utils.db_session_middleware import DbSessionCleanupMiddleware
 from utils.scheduler import ensure_scheduler_started, restore_jobs_from_db
@@ -17,8 +19,10 @@ if not TOKEN:
 
 dp = Dispatcher()
 dp.update.outer_middleware(DbSessionCleanupMiddleware())
+session = AiohttpSession(timeout=ClientTimeout(total=12, connect=4, sock_connect=4, sock_read=8))
 bot = Bot(
     TOKEN,
+    session=session,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
 
