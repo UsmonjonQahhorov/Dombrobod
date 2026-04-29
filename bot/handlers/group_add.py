@@ -1,8 +1,10 @@
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove
+from sqlalchemy.exc import IntegrityError
 from bot.states import MenuState
 from db.models import Groups
+from db import db
 from bot.buttons.reply_markup import main_menu
 from utils.dispatcher import bot
 
@@ -24,8 +26,12 @@ async def group_username_handler(message: Message, state: FSMContext) -> None:
         chat_id = chat_info.id
         group = await Groups.get_group_id(id_=str(chat_id))
         if not group:
-            await Groups.create(group_id=str(chat_id), username=str(chat_title))
-            await message.answer("Gurux qoshildi, botdan foydalanishingiz mumkin!", reply_markup=await main_menu())
+            try:
+                await Groups.create(group_id=str(chat_id), username=str(chat_title))
+                await message.answer("Gurux qoshildi, botdan foydalanishingiz mumkin!", reply_markup=await main_menu())
+            except IntegrityError:
+                await db.rollback()
+                await message.answer("Bu gurux allaqachon qoshilgan.", reply_markup=await main_menu())
         else:
             await message.answer("Bu gurux allaqachon qoshilgan.", reply_markup=await main_menu())
 

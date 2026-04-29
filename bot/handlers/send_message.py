@@ -1,5 +1,6 @@
 from aiogram import F, Router
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove, CallbackQuery
 
@@ -93,6 +94,16 @@ async def interval_handler(msg: Message, state: FSMContext) -> None:
 @message_router.message(Send_message.confirmation)
 async def confirmation_handler(msg: Message, state: FSMContext) -> None:
     data = await state.get_data()
+    if data.get("confirmation_in_progress"):
+        await safe_answer(msg, "So'rov qayta ishlanmoqda, biroz kuting.")
+        return
+    await state.update_data({"confirmation_in_progress": True})
+
+    if not all(key in data for key in ("chat_id", "message_id", "a", "b", "c")):
+        await safe_answer(msg, "So'rov holati eskirgan. Iltimos, qaytadan boshlang.", reply_markup=await main_menu())
+        await state.clear()
+        return
+
     group_id = data["chat_id"]
     message_id = data["message_id"]
     a = int(data["a"])
@@ -137,6 +148,7 @@ async def confirmation_handler(msg: Message, state: FSMContext) -> None:
         await state.clear()
     else:
         await safe_answer(msg, "Iltimos, 'HAA' yoki 'YOQ' tugmalarini bosing.", reply_markup=await yess_no())
+        await state.update_data({"confirmation_in_progress": False})
 
 
 # Ochirish
@@ -157,7 +169,13 @@ async def delete_task_handler(query: CallbackQuery, callback_data: MyCallback):
             await safe_answer(query.message, "Habaringiz o'chirildi", reply_markup=await main_menu())
         else:
             await safe_answer(query.message, "Task topilmadi yoki allaqachon o'chirilgan.", reply_markup=await main_menu())
-        await with_telegram_retry(lambda: query.answer())
+        try:
+            await with_telegram_retry(lambda: query.answer())
+        except TelegramBadRequest:
+            pass
 
     else:
-        await with_telegram_retry(lambda: query.answer("Hech qanday habar mavjud emas"))
+        try:
+            await with_telegram_retry(lambda: query.answer("Hech qanday habar mavjud emas"))
+        except TelegramBadRequest:
+            pass

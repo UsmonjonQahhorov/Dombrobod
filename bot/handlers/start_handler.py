@@ -6,6 +6,8 @@ from aiogram.types import Message, ReplyKeyboardRemove
 from bot.buttons.reply_markup import main_menu
 from bot.states import MenuState
 from db.models import Users
+from sqlalchemy.exc import IntegrityError
+from db import db
 from utils.functions import get_super_admin_ids, is_user_admin
 from utils.telegram_safe import safe_answer, with_telegram_retry
 
@@ -20,7 +22,11 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     user = await Users.get_user_id(id_=str(message.from_user.id))
     try:
         if not user:
-            await Users.create(username=username, user_id=str(user_id), phone_number="987654321")
+            try:
+                await Users.create(username=username, user_id=str(user_id), phone_number="987654321")
+            except IntegrityError:
+                # User may press /start several times quickly; treat duplicate insert as success.
+                await db.rollback()
         if user_id in get_super_admin_ids():
             await Users.update(id_=str(user_id), is_admin=True)
         await state.set_state(MenuState.add_group)
