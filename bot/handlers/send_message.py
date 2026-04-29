@@ -60,6 +60,16 @@ async def interval_handler(msg: Message, state: FSMContext) -> None:
         if a == 0 and b == 0 and c == 0:
             await safe_answer(msg, "Interval 0 bo'lishi mumkin emas.", reply_markup=await back_button())
             return
+        # Stop 1-minute/minute-spam schedules.
+        # The actual trigger interval is controlled by hours/minutes (days_ is end_date duration).
+        trigger_minutes = b * 60 + c
+        if trigger_minutes != 0 and trigger_minutes < 5:
+            await safe_answer(
+                msg,
+                "Interval juda qisqa. Kamida 5 minutdan (yoki 0) foydalaning.",
+                reply_markup=await back_button(),
+            )
+            return
         await state.update_data({"a": a, "b": b, "c": c})
     except ValueError:
         await safe_answer(msg, 'INTERVALNI NOTO\'G\'RI KIRITDINGIZ', reply_markup=await back_button())

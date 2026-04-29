@@ -12,14 +12,14 @@ from aiogram.exceptions import TelegramNetworkError
 
 from db import db
 from db.models import Groups, Messages, Users
-from utils.telegram_safe import with_telegram_retry
+from utils.telegram_safe import telegram_enqueue
 
 
 ADMIN_CHAT_ID = 6108693014
 scheduler = AsyncIOScheduler()
 task_registry: dict[str, dict] = {}
 logger = logging.getLogger(__name__)
-SCHEDULER_JITTER_SECONDS = 10.0
+SCHEDULER_JITTER_SECONDS = 60.0
 
 
 @asynccontextmanager
@@ -43,13 +43,13 @@ async def create_task_func(job_id: str, chat_id: str, message_id: int, from_chat
     from utils.dispatcher import bot
 
     try:
-        await with_telegram_retry(
+        await telegram_enqueue(
             lambda: bot.forward_message(
                 chat_id=chat_id,
                 message_id=message_id,
                 from_chat_id=from_chat_id,
                 request_timeout=2.5,
-            ),
+            )
         )
         logger.info("Message forwarded successfully (job_id=%s, target=%s)", job_id, chat_id)
     except Exception as exc:
@@ -69,14 +69,12 @@ async def create_task_func(job_id: str, chat_id: str, message_id: int, from_chat
             return
 
         logger.exception("Forwarding failed (job_id=%s): %s", job_id, error_text)
-        await with_telegram_retry(
+        await telegram_enqueue(
             lambda: bot.send_message(
                 chat_id=ADMIN_CHAT_ID,
                 text=f"Forwarding failed ({job_id}): {error_text}",
                 request_timeout=2.5,
-            ),
-            retries=1,
-            operation_timeout=2.5,
+            )
         )
 
 

@@ -8,7 +8,7 @@ from aiogram.exceptions import TelegramNetworkError
 from dotenv import load_dotenv
 from utils.db_session_middleware import DbSessionCleanupMiddleware
 from utils.scheduler import ensure_scheduler_started, restore_jobs_from_db
-from utils.telegram_safe import with_telegram_retry
+from utils.telegram_safe import start_telegram_worker, with_telegram_retry
 
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
@@ -37,6 +37,8 @@ async def main() -> None:
     except TelegramNetworkError as exc:
         logging.getLogger(__name__).warning("delete_webhook failed after retries: %s", exc)
     await restore_jobs_from_db()
+    # Start a single Telegram worker for scheduler-driven bursts.
+    start_telegram_worker(bot)
     try:
         await dp.start_polling(bot, skip_updates=True)
     finally:
