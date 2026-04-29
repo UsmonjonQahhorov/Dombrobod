@@ -48,7 +48,7 @@ async def create_task_func(job_id: str, chat_id: str, message_id: int, from_chat
                 chat_id=chat_id,
                 message_id=message_id,
                 from_chat_id=from_chat_id,
-                request_timeout=2.5,
+                request_timeout=10,
             )
         )
         logger.info("Message forwarded successfully (job_id=%s, target=%s)", job_id, chat_id)
@@ -65,7 +65,12 @@ async def create_task_func(job_id: str, chat_id: str, message_id: int, from_chat
         # For network/timeout failures, don't spam admin messages; just log.
         # Let the scheduler retry at the next interval.
         if isinstance(exc, (TelegramNetworkError, asyncio.TimeoutError)):
-            logger.warning("Forwarding skipped due to Telegram network error (job_id=%s): %s", job_id, error_text)
+            logger.warning(
+                "Forwarding skipped due to Telegram network error (job_id=%s): %r (%s)",
+                job_id,
+                exc,
+                type(exc).__name__,
+            )
             return
 
         logger.exception("Forwarding failed (job_id=%s): %s", job_id, error_text)
@@ -73,7 +78,7 @@ async def create_task_func(job_id: str, chat_id: str, message_id: int, from_chat
             lambda: bot.send_message(
                 chat_id=ADMIN_CHAT_ID,
                 text=f"Forwarding failed ({job_id}): {error_text}",
-                request_timeout=2.5,
+                request_timeout=10,
             )
         )
 

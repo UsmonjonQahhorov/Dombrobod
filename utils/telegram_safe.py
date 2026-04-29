@@ -41,7 +41,7 @@ async def telegram_worker(bot: Any, *, throttle_seconds: float = 0.3) -> None:
     while True:
         operation, fut_any = await _telegram_send_queue.get()
         try:
-            result = await with_telegram_retry(operation, retries=1, operation_timeout=2.5)
+            result = await with_telegram_retry(operation, retries=2, operation_timeout=10.0)
             fut_any.set_result(result)
         except Exception as exc:
             fut_any.set_exception(exc)
@@ -56,14 +56,14 @@ def start_telegram_worker(bot: Any) -> None:
     if _telegram_worker_started and _telegram_worker_task and not _telegram_worker_task.done():
         return
     _telegram_worker_started = True
-    _telegram_worker_task = asyncio.create_task(telegram_worker(bot))
+    _telegram_worker_task = asyncio.create_task(telegram_worker(bot, throttle_seconds=0.05))
 
 
 async def with_telegram_retry(
     operation: Callable[[], Awaitable[T]],
     *,
-    retries: int = 1,
-    operation_timeout: float = 2.5,
+    retries: int = 2,
+    operation_timeout: float = 10.0,
 ) -> T:
     last_error: Exception | None = None
     # `retries` here means "total attempts" (i.e. 1 == fail fast, 2 == retry once).
@@ -81,10 +81,10 @@ async def with_telegram_retry(
 
 async def safe_answer(message, text: str, **kwargs: Any) -> bool:
     # Keep user-facing operations bounded to avoid multi-minute hangs.
-    kwargs.setdefault("request_timeout", 2.5)
+    kwargs.setdefault("request_timeout", 10)
     try:
-        await with_telegram_retry(lambda: message.answer(text, **kwargs), retries=1, operation_timeout=2.5)
+        await with_telegram_retry(lambda: message.answer(text, **kwargs), retries=2, operation_timeout=10.0)
         return True
     except Exception as exc:
-        logger.error("Failed to send message.answer after retries: %s", exc)
+        logger.error("Failed to send message.answer after retries: %r (%s)", exc, type(exc).__name__)
         return False
