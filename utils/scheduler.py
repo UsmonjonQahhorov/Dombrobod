@@ -1,10 +1,14 @@
 import logging
+import asyncio
+import random
 from datetime import datetime, timedelta
 import inspect
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+from aiogram.exceptions import TelegramNetworkError
 
 from db import db
 from db.models import Groups, Messages, Users
@@ -15,6 +19,7 @@ ADMIN_CHAT_ID = 6108693014
 scheduler = AsyncIOScheduler()
 task_registry: dict[str, dict] = {}
 logger = logging.getLogger(__name__)
+SCHEDULER_JITTER_SECONDS = 10.0
 
 
 @asynccontextmanager
@@ -43,10 +48,8 @@ async def create_task_func(job_id: str, chat_id: str, message_id: int, from_chat
                 chat_id=chat_id,
                 message_id=message_id,
                 from_chat_id=from_chat_id,
-                request_timeout=20,
+                request_timeout=2.5,
             ),
-            retries=4,
-            base_delay=1.0,
         )
         logger.info("Message forwarded successfully (job_id=%s, target=%s)", job_id, chat_id)
     except Exception as exc:
@@ -57,20 +60,24 @@ async def create_task_func(job_id: str, chat_id: str, message_id: int, from_chat
             async with db_session_scope():
                 await Messages.delete_task(job_id)
             logger.warning("Removed broken job due to missing source message (job_id=%s)", job_id)
-        else:
-            logger.exception("Forwarding failed (job_id=%s): %s", job_id, error_text)
-        try:
-            await with_telegram_retry(
-                lambda: bot.send_message(
-                    chat_id=ADMIN_CHAT_ID,
-                    text=f"Forwarding failed ({job_id}): {error_text}",
-                    request_timeout=15,
-                ),
-                retries=2,
-                base_delay=0.8,
-            )
-        except Exception as notify_exc:
-            logger.error("Failed to notify admin about forwarding failure (job_id=%s): %s", job_id, notify_exc)
+            return
+
+        # For network/timeout failures, don't spam admin messages; just log.
+        # Let the scheduler retry at the next interval.
+        if isinstance(exc, (TelegramNetworkError, asyncio.TimeoutError)):
+            logger.warning("Forwarding skipped due to Telegram network error (job_id=%s): %s", job_id, error_text)
+            return
+
+        logger.exception("Forwarding failed (job_id=%s): %s", job_id, error_text)
+        await with_telegram_retry(
+            lambda: bot.send_message(
+                chat_id=ADMIN_CHAT_ID,
+                text=f"Forwarding failed ({job_id}): {error_text}",
+                request_timeout=2.5,
+            ),
+            retries=1,
+            operation_timeout=2.5,
+        )
 
 
 async def schedule_forwarding(
@@ -92,10 +99,12 @@ async def schedule_forwarding(
         "interval",
         **interval_kwargs,
         args=(job_id, group_id, message_id, from_chat_id),
-        next_run_time=datetime.now() + timedelta(seconds=5),
+        next_run_time=datetime.now() + timedelta(seconds=5 + random.uniform(0, SCHEDULER_JITTER_SECONDS)),
         end_date=datetime.now() + timedelta(days=days_),
         id=job_id,
         replace_existing=False,
+        coalesce=True,
+        max_instances=1,
     )
     logger.info("Scheduled new forwarding job (job_id=%s, group_id=%s)", job_id, group_id)
     task_registry[job_id] = {
@@ -179,10 +188,12 @@ async def restore_jobs_from_db() -> None:
             "interval",
             **interval_kwargs,
             args=(task.job_name, group.group_id, task.message_id, int(user.user_id)),
-            next_run_time=datetime.now() + timedelta(seconds=5),
+            next_run_time=datetime.now() + timedelta(seconds=5 + random.uniform(0, SCHEDULER_JITTER_SECONDS)),
             end_date=original_end_date,
             id=task.job_name,
             replace_existing=False,
+            coalesce=True,
+            max_instances=1,
         )
         logger.info("Restored job from DB (job_id=%s)", task.job_name)
         task_registry[task.job_name] = {

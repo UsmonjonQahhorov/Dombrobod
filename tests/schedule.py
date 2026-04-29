@@ -1,6 +1,6 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-import time
+import asyncio
 from apscheduler.triggers.cron import CronTrigger
 
 # Define a simple function to schedule
@@ -20,10 +20,9 @@ jobs = scheduler.get_jobs()
 for i in jobs:
     print(i.id)
 
-time.sleep(20)
+async def main() -> None:
+    await asyncio.sleep(20)
+    scheduler.shutdown()
 
-
-# scheduler.remove_job(job.id)
-
-# Optionally shutdown the scheduler
-scheduler.shutdown()
+if __name__ == "__main__":
+    asyncio.run(main())

@@ -7,13 +7,14 @@ from db.models import Groups
 from db import db
 from bot.buttons.reply_markup import main_menu
 from utils.dispatcher import bot
+from utils.telegram_safe import safe_answer
 
 group_add = Router(name=__name__)
 
 
 @group_add.message(F.text.__eq__("Gurux qo'shish"))
 async def group_addition(message: Message, state: FSMContext):
-    await message.answer("Gruppaning USERNAME ini jo'nating!", reply_markup=ReplyKeyboardRemove())
+    await safe_answer(message, "Gruppaning USERNAME ini jo'nating!", reply_markup=ReplyKeyboardRemove())
     await state.set_state(MenuState.group_username)
 
 
@@ -28,15 +29,18 @@ async def group_username_handler(message: Message, state: FSMContext) -> None:
         if not group:
             try:
                 await Groups.create(group_id=str(chat_id), username=str(chat_title))
-                await message.answer("Gurux qoshildi, botdan foydalanishingiz mumkin!", reply_markup=await main_menu())
+                await safe_answer(message, "Gurux qoshildi, botdan foydalanishingiz mumkin!", reply_markup=await main_menu())
             except IntegrityError:
                 await db.rollback()
-                await message.answer("Bu gurux allaqachon qoshilgan.", reply_markup=await main_menu())
+                await safe_answer(message, "Bu gurux allaqachon qoshilgan.", reply_markup=await main_menu())
         else:
-            await message.answer("Bu gurux allaqachon qoshilgan.", reply_markup=await main_menu())
+            await safe_answer(message, "Bu gurux allaqachon qoshilgan.", reply_markup=await main_menu())
 
         await state.clear()
 
     except Exception as e:
-        await message.answer(f"Xatolik yuz berdi: {str(e)}. Iltimos, guruh username ni to'g'ri formatda yuboring.")
+        await safe_answer(
+            message,
+            f"Xatolik yuz berdi: {str(e)}. Iltimos, guruh username ni to'g'ri formatda yuboring.",
+        )
         await state.clear()
