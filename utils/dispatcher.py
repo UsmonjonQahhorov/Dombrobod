@@ -3,11 +3,9 @@ import os
 
 from aiogram import Dispatcher, Bot
 from aiogram.client.default import DefaultBotProperties
-from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramNetworkError
 from dotenv import load_dotenv
-from aiohttp import TCPConnector
 from utils.db_session_middleware import DbSessionCleanupMiddleware
 from utils.scheduler import ensure_scheduler_started, restore_jobs_from_db
 from utils.telegram_safe import with_telegram_retry
@@ -20,11 +18,8 @@ if not TOKEN:
 dp = Dispatcher()
 dp.update.outer_middleware(DbSessionCleanupMiddleware())
 
-# Limit connection pool to prevent request starvation under burst load.
-session = AiohttpSession(connector=TCPConnector(limit=20, limit_per_host=10))
 bot = Bot(
     TOKEN,
-    session=session,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
 
