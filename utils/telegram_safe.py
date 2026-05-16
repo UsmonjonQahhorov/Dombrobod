@@ -39,16 +39,23 @@ async def telegram_enqueue(operation: Callable[[], Awaitable[T]]) -> T:
 
 async def telegram_worker(bot: Any, *, throttle_seconds: float = 0.3) -> None:
     while True:
-        operation, fut_any = await _telegram_send_queue.get()
         try:
-            result = await with_telegram_retry(operation, retries=2, operation_timeout=10.0)
-            fut_any.set_result(result)
-        except Exception as exc:
-            fut_any.set_exception(exc)
-        finally:
-            _telegram_send_queue.task_done()
-        if throttle_seconds > 0:
-            await asyncio.sleep(throttle_seconds)
+            operation, fut_any = await _telegram_send_queue.get()
+            try:
+                result = await with_telegram_retry(operation, retries=2, operation_timeout=10.0)
+                if not fut_any.done():
+                    fut_any.set_result(result)
+            except Exception as exc:
+                if not fut_any.done():
+                    fut_any.set_exception(exc)
+            finally:
+                _telegram_send_queue.task_done()
+            if throttle_seconds > 0:
+                await asyncio.sleep(throttle_seconds)
+        except Exception:
+            logger.exception("telegram_worker unexpected error, continuing")
+            if throttle_seconds > 0:
+                await asyncio.sleep(throttle_seconds)
 
 
 def start_telegram_worker(bot: Any) -> None:

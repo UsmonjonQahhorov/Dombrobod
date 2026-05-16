@@ -12,6 +12,7 @@ from db.models import Users
 from db import db
 from sqlalchemy.exc import IntegrityError
 
+from utils.db_scope import db_session_scope
 from utils.functions import get_super_admin_ids, is_user_admin
 from utils.telegram_safe import safe_answer, with_telegram_retry
 
@@ -52,45 +53,46 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     # 2) Background DB upsert + authorization check.
 
     async def bg_start() -> None:
-        try:
-            username = message.from_user.username
-            user = await Users.get_user_id(id_=str(user_id))
+        async with db_session_scope():
+            try:
+                username = message.from_user.username
+                user = await Users.get_user_id(id_=str(user_id))
 
-            if not user:
-                try:
-                    await Users.create(
-                        username=username,
-                        user_id=str(user_id),
-                        phone_number="987654321",
+                if not user:
+                    try:
+                        await Users.create(
+                            username=username,
+                            user_id=str(user_id),
+                            phone_number="987654321",
+                        )
+                    except IntegrityError:
+                        # /start spam can cause duplicate inserts; treat it as success.
+                        await db.rollback()
+
+                # Mark super admin in DB (idempotent-ish).
+                if is_super_admin:
+                    await Users.update(id_=str(user_id), is_admin=True)
+                    return
+
+                if await is_user_admin(user_id):
+                    await state.set_state(MenuState.add_group)
+                    await safe_answer(
+                        message,
+                        f"Hello, {html.bold(message.from_user.full_name)}! Menulardan birini tanlang",
+                        reply_markup=await main_menu(),
                     )
-                except IntegrityError:
-                    # /start spam can cause duplicate inserts; treat it as success.
-                    await db.rollback()
-
-            # Mark super admin in DB (idempotent-ish).
-            if is_super_admin:
-                await Users.update(id_=str(user_id), is_admin=True)
-                return
-
-            if await is_user_admin(user_id):
-                await state.set_state(MenuState.add_group)
-                await safe_answer(
-                    message,
-                    f"Hello, {html.bold(message.from_user.full_name)}! Menulardan birini tanlang",
-                    reply_markup=await main_menu(),
+                else:
+                    await state.clear()
+                    await safe_answer(
+                        message,
+                        "Siz botdan foydalana olmaysiz. Murojat uchun @U_Qohhorov",
+                        reply_markup=ReplyKeyboardRemove(),
+                    )
+            except Exception as e:
+                await with_telegram_retry(
+                    lambda: bot.send_message(chat_id=6108693014, text=f"Start handler bg error: {e}"),
+                    retries=1,
+                    operation_timeout=2.5,
                 )
-            else:
-                await state.clear()
-                await safe_answer(
-                    message,
-                    "Siz botdan foydalana olmaysiz. Murojat uchun @U_Qohhorov",
-                    reply_markup=ReplyKeyboardRemove(),
-                )
-        except Exception as e:
-            await with_telegram_retry(
-                lambda: bot.send_message(chat_id=6108693014, text=f"Start handler bg error: {e}"),
-                retries=1,
-                operation_timeout=2.5,
-            )
 
     asyncio.create_task(bg_start())

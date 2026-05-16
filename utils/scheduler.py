@@ -2,16 +2,14 @@ import logging
 import asyncio
 import random
 from datetime import datetime, timedelta
-import inspect
-from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from aiogram.exceptions import TelegramNetworkError
 
-from db import db
 from db.models import Groups, Messages, Users
+from utils.db_scope import db_session_scope
 from utils.telegram_safe import telegram_enqueue
 
 
@@ -19,18 +17,12 @@ ADMIN_CHAT_ID = 6108693014
 scheduler = AsyncIOScheduler()
 task_registry: dict[str, dict] = {}
 logger = logging.getLogger(__name__)
-SCHEDULER_JITTER_SECONDS = 60.0
 
-
-@asynccontextmanager
-async def db_session_scope():
-    try:
-        yield
-    finally:
-        logger.debug("Cleaning scoped DB session in scheduler context")
-        maybe_awaitable = db.remove()
-        if inspect.isawaitable(maybe_awaitable):
-            await maybe_awaitable
+# First run for a newly created job (seconds).
+SCHEDULER_INITIAL_JITTER_SECONDS = 60.0
+# Spread restored jobs on startup to avoid queue/APScheduler stampedes.
+RESTORE_STAGGER_BASE_SECONDS = 45.0
+RESTORE_STAGGER_STEP_SECONDS = 25.0
 
 
 def ensure_scheduler_started() -> None:
@@ -39,7 +31,15 @@ def ensure_scheduler_started() -> None:
         logger.info("Scheduler started")
 
 
-async def create_task_func(job_id: str, chat_id: str, message_id: int, from_chat_id: int) -> None:
+def _restore_delay_seconds(index: int) -> float:
+    return RESTORE_STAGGER_BASE_SECONDS + index * RESTORE_STAGGER_STEP_SECONDS + random.uniform(0, 20.0)
+
+
+async def _execute_forward_job(job_id: str, chat_id: str, message_id: int, from_chat_id: int) -> None:
+    """
+    Runs outside APScheduler job slot so max_instances=1 is not held while
+    waiting in the Telegram send queue.
+    """
     from utils.dispatcher import bot
 
     try:
@@ -54,16 +54,12 @@ async def create_task_func(job_id: str, chat_id: str, message_id: int, from_chat
         logger.info("Message forwarded successfully (job_id=%s, target=%s)", job_id, chat_id)
     except Exception as exc:
         error_text = str(exc)
-        # Auto-clean invalid jobs to avoid endless failing retries.
         if "message to forward not found" in error_text.lower():
             remove_task(job_id)
-            async with db_session_scope():
-                await Messages.delete_task(job_id)
+            await Messages.delete_task(job_id)
             logger.warning("Removed broken job due to missing source message (job_id=%s)", job_id)
             return
 
-        # For network/timeout failures, don't spam admin messages; just log.
-        # Let the scheduler retry at the next interval.
         if isinstance(exc, (TelegramNetworkError, asyncio.TimeoutError)):
             logger.warning(
                 "Forwarding skipped due to Telegram network error (job_id=%s): %r (%s)",
@@ -74,13 +70,26 @@ async def create_task_func(job_id: str, chat_id: str, message_id: int, from_chat
             return
 
         logger.exception("Forwarding failed (job_id=%s): %s", job_id, error_text)
-        await telegram_enqueue(
-            lambda: bot.send_message(
-                chat_id=ADMIN_CHAT_ID,
-                text=f"Forwarding failed ({job_id}): {error_text}",
-                request_timeout=10,
+        try:
+            await telegram_enqueue(
+                lambda: bot.send_message(
+                    chat_id=ADMIN_CHAT_ID,
+                    text=f"Forwarding failed ({job_id}): {error_text}",
+                    request_timeout=10,
+                )
             )
-        )
+        except Exception as notify_exc:
+            logger.error("Failed to notify admin (job_id=%s): %r", job_id, notify_exc)
+    finally:
+        async with db_session_scope():
+            pass
+
+
+async def create_task_func(job_id: str, chat_id: str, message_id: int, from_chat_id: int) -> None:
+    asyncio.create_task(
+        _execute_forward_job(job_id, chat_id, message_id, from_chat_id),
+        name=f"forward-{job_id[:8]}",
+    )
 
 
 async def schedule_forwarding(
@@ -102,7 +111,7 @@ async def schedule_forwarding(
         "interval",
         **interval_kwargs,
         args=(job_id, group_id, message_id, from_chat_id),
-        next_run_time=datetime.now() + timedelta(seconds=5 + random.uniform(0, SCHEDULER_JITTER_SECONDS)),
+        next_run_time=datetime.now() + timedelta(seconds=5 + random.uniform(0, SCHEDULER_INITIAL_JITTER_SECONDS)),
         end_date=datetime.now() + timedelta(days=days_),
         id=job_id,
         replace_existing=False,
@@ -157,6 +166,7 @@ async def restore_jobs_from_db() -> None:
     ensure_scheduler_started()
     async with db_session_scope():
         tasks = await Messages.get_all()
+    restore_index = 0
     for task in tasks:
         if not task.job_name:
             continue
@@ -186,19 +196,25 @@ async def restore_jobs_from_db() -> None:
             logger.info("Removed expired job from DB on restore (job_id=%s)", task.job_name)
             continue
 
+        restore_delay = _restore_delay_seconds(restore_index)
+        restore_index += 1
         job = scheduler.add_job(
             create_task_func,
             "interval",
             **interval_kwargs,
             args=(task.job_name, group.group_id, task.message_id, int(user.user_id)),
-            next_run_time=datetime.now() + timedelta(seconds=5 + random.uniform(0, SCHEDULER_JITTER_SECONDS)),
+            next_run_time=datetime.now() + timedelta(seconds=restore_delay),
             end_date=original_end_date,
             id=task.job_name,
             replace_existing=False,
             coalesce=True,
             max_instances=1,
         )
-        logger.info("Restored job from DB (job_id=%s)", task.job_name)
+        logger.info(
+            "Restored job from DB (job_id=%s, first_run_in=%.1fs)",
+            task.job_name,
+            restore_delay,
+        )
         task_registry[task.job_name] = {
             "group_id": group.group_id,
             "message_id": task.message_id,

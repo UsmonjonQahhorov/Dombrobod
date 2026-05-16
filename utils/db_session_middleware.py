@@ -1,10 +1,9 @@
-import inspect
 import logging
 from typing import Any, Awaitable, Callable, Dict
 
 from aiogram import BaseMiddleware
 
-from db import db
+from utils.db_scope import release_db_session
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +18,5 @@ class DbSessionCleanupMiddleware(BaseMiddleware):
         try:
             return await handler(event, data)
         finally:
-            # Always clear task-local scoped session state after each update.
             logger.debug("Cleaning scoped DB session after update")
-            maybe_awaitable = db.remove()
-            if inspect.isawaitable(maybe_awaitable):
-                await maybe_awaitable
+            await release_db_session()

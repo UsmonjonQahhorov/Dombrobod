@@ -5,7 +5,6 @@ import asyncio
 from aiogram import Dispatcher, Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramNetworkError
 from aiogram.utils.backoff import BackoffConfig
 from dotenv import load_dotenv
 from utils.db_session_middleware import DbSessionCleanupMiddleware
@@ -26,11 +25,11 @@ bot = Bot(
 )
 
 
-async def telegram_watchdog(*, fail_limit: int = 20, interval_seconds: float = 15.0) -> None:
+async def telegram_watchdog(*, fail_limit: int = 15, interval_seconds: float = 30.0) -> None:
     fails = 0
     while True:
         try:
-            await with_telegram_retry(lambda: bot.get_me(), retries=1, operation_timeout=10.0)
+            await with_telegram_retry(lambda: bot.get_me(), retries=1, operation_timeout=15.0)
             if fails:
                 logging.getLogger(__name__).warning("Telegram watchdog recovered after %s failures", fails)
             fails = 0
@@ -59,7 +58,7 @@ async def main() -> None:
             retries=2,
             operation_timeout=10.0,
         )
-    except TelegramNetworkError as exc:
+    except Exception as exc:
         logging.getLogger(__name__).warning("delete_webhook failed after retries: %s", exc)
     await restore_jobs_from_db()
     # Start a single Telegram worker for scheduler-driven bursts.
